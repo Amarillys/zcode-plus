@@ -103,12 +103,12 @@ flowchart TD
 ### ⚡ 首次安装 / 升级后应用
 1. **完全退出正在运行的 ZCode 客户端**（避免打包覆盖时因文件占用报错）。
 2. 进入目录：`%LOCALAPPDATA%\Programs\ZCode\zcode-plus\`
-3. **双击运行 [`apply_patch.bat`](file:///C:/Users/Chiyo/AppData/Local/Programs/ZCode/zcode-plus/apply_patch.bat)**（或在终端运行 `node auto_patch.js`）。
+3. **双击运行 `apply_patch.bat`**（或在终端运行 `node auto_patch.js`）。
 4. 看到终端提示 `🎉 补丁全部成功应用并打包完成！` 后，直接打开 ZCode 即可！
 
 ### ⏪ 还原官方原版
 如需撤销所有补丁还原为纯净官方版本：
-* **双击运行 [`restore_backup.bat`](file:///C:/Users/Chiyo/AppData/Local/Programs/ZCode/zcode-plus/restore_backup.bat)** 即可秒级复原。
+* **双击运行 `restore_backup.bat`** 即可秒级复原。
 
 ---
 
