@@ -27,8 +27,21 @@ if errorlevel 1 (
     exit /b 1
 )
 
+set CJS_DEST=%ROOT_DIR%\resources\glm\zcode.cjs
+set CJS_BAK=%ROOT_DIR%\resources\glm\zcode.cjs.bak
+
+if exist "%CJS_BAK%" (
+    echo 正在还原 zcode.cjs 核心引擎备份...
+    copy /Y "%CJS_BAK%" "%CJS_DEST%" >nul
+    if errorlevel 1 (
+        echo [WARN] zcode.cjs restore failed!
+    ) else (
+        echo [✔] zcode.cjs 已成功恢复官方原版！
+    )
+)
+
 echo ========================================================
-echo [SUCCESS] Original app.asar restored!
-echo [成功] 原始 app.asar 已恢复！请重启 ZCode。
+echo [SUCCESS] Original app.asar & zcode.cjs restored!
+echo [成功] 原始 app.asar 与 zcode.cjs 已恢复！请重启 ZCode。
 echo ========================================================
 pause

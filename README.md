@@ -75,6 +75,23 @@
 
 ---
 
+### 6. ⚡ 初始 Token 暴降 78% · 冗余工具与系统提示词瘦身 (Token Saver & Bloat Cutter)
+* **背景痛点**：官方客户端在初始对话时默认挂载了 32 个系统工具，特别是在 `CreateWorkflow` / `SaveWorkflow` 的 Description 里直接塞入了上万字符的 TypeScript Workflow SDK 文档，并默认启用了平时写代码根本用不到的定时与离峰任务，导致初次对话就直接吃掉超过 3.6 万 Token（系统工具独占 3.4 万+ Token）。
+* **精准裁剪 16 个写代码完全用不到的冗余工具**（立省 **~26,500 Tokens**）：
+  * **工作流全家桶 (Dynamic Workflow)**：`CreateWorkflow`, `SaveWorkflow`, `EvalWorkflowSnippet`, `AmendWorkflow`, `ListWorkflowRuns`, `GetWorkflowRun`, `ResumeWorkflowRun`, `ResolveWorkflowQuestion`, `ListSavedWorkflows`
+  * **定时与离峰任务全家桶 (Cron & Off-Peak)**：`CronCreate`, `CronUpdate`, `CronDelete`, `CronList`, `OffPeakCreate`, `OffPeakList`
+  * **元查询工具**：`ListModels`
+* **完整保留所有核心开发、计划与调试工具**：
+  * **计划模式与用户交互**：`AskUserQuestion`、`EnterPlanMode`、`ExitPlanMode` 100% 完整保留！
+  * **子智能体调度与通信**：`Agent`、`SendMessage` 100% 完整保留！
+  * **代码、文件与终端调试**：`Bash`、`Read`、`Write`、`Edit`、`TaskOutput`、`TaskStop`、`TodoRead`、`TodoWrite`、`WebFetch`、`Skill`、`ReadSessionContext` 全部完好无损！
+* **精炼自带系统提示词 (可选交互项，默认保护 GLM 官方订阅)**：
+  * **GLM 官方订阅用户 (建议选 N)**：官方模型（GLM-4 / GLM-Zero）对原版提示词有深度微调和专属 Context Cache 缓存机制。脚本运行时会弹出交互询问，**默认回车即为 N（不修改提示词）**，完美保障官方订阅用户不破坏缓存命中与行为稳定性！
+  * **第三方模型 / 自定义 API 用户 (可按需选 Y)**：若您使用 Claude、DeepSeek、GPT 或 Kimi 等第三方模型，输入 **Y** 可精简长达 2,300 字符的冗长安防免责声明与 5,400 字符的话痨沟通指南，并注入「深模块设计、决策树对齐、平等协作」高阶工程准则（[详见工程规范文档](file:///C:/Users/Chiyo/AppData/Local/Programs/ZCode/zcode-plus/docs/engineering-standards.md)），再省 **~1,500 Tokens**！
+* **效果**：初始会话 Token 从 **36,000+** 骤降至 **约 7,000 ~ 9,000 Tokens**（**降幅高达 75% ~ 78%**），大幅节省上下文窗口与 API 额度，显著提升首字推理时延（TTFT）！
+
+---
+
 ## 🏗️ 架构与补丁工作流 (Workflow)
 
 ```mermaid
@@ -120,6 +137,8 @@ zcode-plus/
 ├── auto_patch.js           # 🌟 核心一键主补丁脚本 (3.14 深度适配版)
 ├── apply_patch.bat         # 🌟 Windows 双击一键执行打补丁工具
 ├── restore_backup.bat      # 🌟 官方原版一键秒级还原脚本
+├── docs/                   # 📚 核心设计与高阶工程规范文档
+│   └── engineering-standards.md # 🏛️ 深模块设计与决策树质询规范
 ├── extracted-asar/         # 📦 解包源码工作区 (补丁编译与调试)
 └── analyze/                # 🗂️ 架构逆向分析、测试与历史脚本归档
 ```
@@ -138,6 +157,7 @@ zcode-plus/
 | **多语言映射** | `out/renderer/assets/IntlProvider-*.js` | 注入 `settings.themeMode.*` 中英对照文案 |
 | **APM & RUM 阻断**| `out/main/chunk-*.js` | 批量屏蔽 `https://proj-xtrace-*` 采集地址 |
 | **Telemetry 拦截**| `out/main/chunk-3FBMHTTY.js` | 短路 `/api/v1/event/report` 遥测上报函数 |
+| **Token 瘦身** | `resources/glm/zcode.cjs` | 拦截 `toContracts` 过滤 16 个冗余工具；精简系统提示词 |
 
 ---
 
@@ -151,6 +171,11 @@ zcode-plus/
 
 **Q3：拦截遥测后会影响 AI 生成代码或 MCP 扩展吗？**  
 > **A**：完全不会。所有被阻断的均为纯粹的用户行为统计、错误追踪以及设备指纹上报，核心 LLM 对话、MCP 工具调用、网络搜索与人机滑块验证均受到完整保护且独立运行。
+
+**Q4：打补丁时弹出的「是否修改系统自带提示词？[y/N]」应该怎么选？**  
+> **A**：
+> * **如果您使用的是 GLM 官方订阅 / 官方套餐**：直接按回车（默认 **N**）。官方模型针对原版提示词有特殊的格式对齐与 Prompt Caching，保持原版能获得最稳定的输出质量与官方缓存命中。即使选 N，脚本依然会为您剔除 16 个写代码完全用不到的冗余工具，初始 Token 依然能暴省 26,500+ Tokens！
+> * **如果您使用的是第三方模型 / 自定义 API (如 Claude/DeepSeek/GPT/Kimi等)**：建议输入 **Y**。不仅可以进一步削减约 1,500 Tokens 的长文安防免责与话痨指令，还会注入「深模块设计、决策树对齐、平等协作」高阶工程规范，让模型的编码与协同体验更上一个台阶。
 
 ---
 

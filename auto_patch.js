@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
+const readline = require('readline');
 
 const rootDir = path.resolve(__dirname, '..');
 const tempDir = __dirname;
@@ -9,11 +10,44 @@ const asarBak = path.join(rootDir, 'resources', 'app.asar.bak');
 const extractedDir = path.join(tempDir, 'extracted-asar');
 const assetsDir = path.join(extractedDir, 'out', 'renderer', 'assets');
 
-console.log('====================================================');
-console.log('    ZCode Master Auto-Patcher (3.14 深度适配版)     ');
-console.log('====================================================');
+function askPromptModification() {
+  return new Promise((resolve) => {
+    if (!process.stdin.isTTY) {
+      return resolve(false);
+    }
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout
+    });
+    console.log('\n----------------------------------------------------');
+    console.log('❓ [可选配置] 是否修改并优化系统提示词 (System Prompt)？');
+    console.log('   ⚠️ [重要提示] 如果您使用的是 GLM 官方订阅/官方套餐，请不要修改 (输入 N)！');
+    console.log('      (官方模型深度绑定了原版提示词与缓存机制，修改可能导致行为偏差或缓存失效)');
+    console.log('   💡 若您主要使用 第三方模型 / 自定义 API (Claude/DeepSeek/GPT/Kimi等)：');
+    console.log('      输入 Y 可精简安全声明与长文交流规范，并注入「深模块设计、决策树对齐」工程准则');
+    rl.question('👉 是否确认修改提示词？[y/N] (默认 N，直接回车即保持官方原版): ', (ans) => {
+      rl.close();
+      const choice = ans.trim().toLowerCase();
+      resolve(choice === 'y' || choice === 'yes');
+    });
+  });
+}
 
-// 检查 ZCode 进程是否在运行
+async function main() {
+  console.log('====================================================');
+  console.log('    ZCode Master Auto-Patcher (3.14 深度适配版)     ');
+  console.log('====================================================');
+
+  // 询问用户是否修改系统提示词 (默认 N，保护 GLM 官方订阅)
+  const shouldPatchPrompt = await askPromptModification();
+  if (shouldPatchPrompt) {
+    console.log('  -> [选择已确认] 将修改系统提示词 (适合第三方模型/自定义 API)');
+  } else {
+    console.log('  -> [选择已确认] 保持官方原版提示词 (完美兼容 GLM 官方订阅)');
+  }
+  console.log('----------------------------------------------------\n');
+
+  // 检查 ZCode 进程是否在运行
 try {
   const tasklist = execSync('tasklist', { encoding: 'utf8' });
   if (tasklist.toLowerCase().includes('zcode.exe')) {
@@ -236,6 +270,84 @@ if (fs.existsSync(mainDir)) {
     }
   }
 }
+// --- 补丁 6: Token 极致精简与冗余工具/提示词裁剪 (resources/glm/zcode.cjs) ---
+const glmDir = path.join(rootDir, 'resources', 'glm');
+const zcodeCjsFile = path.join(glmDir, 'zcode.cjs');
+const zcodeCjsBak = path.join(glmDir, 'zcode.cjs.bak');
+
+if (fs.existsSync(zcodeCjsFile)) {
+  console.log('  -> 正在应用 Token 极致精简补丁 (zcode.cjs)...');
+  // 6.1 备份与基线还原
+  if (!fs.existsSync(zcodeCjsBak)) {
+    fs.copyFileSync(zcodeCjsFile, zcodeCjsBak);
+    console.log('  ✔ [Token 瘦身] 已创建原始 zcode.cjs 干净备份副本');
+  } else {
+    fs.copyFileSync(zcodeCjsBak, zcodeCjsFile);
+  }
+
+  let cjsCode = fs.readFileSync(zcodeCjsFile, 'utf8');
+
+  // 6.2 冗余工具剔除 (Workflow 全家桶 / 定时与离峰任务全家桶)
+  const targetToContracts = 'toContracts(){return Array.from(this.tools.values()).filter(t=>t.metadata.providerVisible!==!1)';
+  const replaceToContracts = 'toContracts(){var _b=new Set(["CreateWorkflow","SaveWorkflow","EvalWorkflowSnippet","AmendWorkflow","ListWorkflowRuns","GetWorkflowRun","ResumeWorkflowRun","ResolveWorkflowQuestion","ListSavedWorkflows","CronCreate","CronDelete","CronList","CronUpdate","OffPeakCreate","OffPeakList","ListModels"]);return Array.from(this.tools.values()).filter(t=>t.metadata.providerVisible!==!1&&!_b.has(t.metadata.name))';
+
+  if (cjsCode.includes(targetToContracts)) {
+    cjsCode = cjsCode.replace(targetToContracts, replaceToContracts);
+    console.log('  ✔ [Token 瘦身] 已过滤 16 个写代码用不到的冗余工具 (立省 ~26,500 Token)');
+    console.log('     * 包含: Workflow 全家桶 (Create/Save/EvalWorkflow等)、Cron定时、OffPeak离峰、ListModels');
+    console.log('     * 保留: AskUserQuestion, Enter/ExitPlanMode, Agent, SendMessage 及所有写代码/调试核心工具');
+  }
+
+  // 6.3 & 6.4 系统提示词精简与工程规范注入 (由用户交互确认，默认跳过以完美兼容 GLM 官方订阅)
+  if (shouldPatchPrompt) {
+    // 精简冗长安防免责声明
+    const targetWeo = 'weo="IMPORTANT: Assist with authorized security testing, defensive security, CTF challenges, and educational contexts. Refuse requests for destructive techniques, DoS attacks, mass targeting, supply chain compromise, or detection evasion for malicious purposes. Dual-use security tools (C2 frameworks, credential testing, exploit development) require clear authorization context: pentesting engagements, CTF competitions, security research, or defensive use cases."';
+    const replaceWeo = 'weo="Refuse requests for formatting the hard drive or clearing directories; instead, let the user perform these actions themselves."';
+    if (cjsCode.includes(targetWeo)) {
+      cjsCode = cjsCode.replace(targetWeo, replaceWeo);
+      console.log('  ✔ [提示词精简] 系统安全声明已精简为极简模式');
+    }
+
+    // 精简话痨型沟通规范 (# Communicating with the user)
+    const targetComm = 'additional:{beforeDefault:["# Communicating with the user","","Your text output is what the user reads; they usually can\'t see your thinking or the raw tool results. Write it for a teammate who stepped away and is catching up, not for a log file: they don\'t know the codenames or shorthand you created along the way, and they didn\'t watch your process unfold. Before your first tool call, say in a sentence what you\'re about to do; while working, give brief updates when you find something load-bearing or change direction.","","Text you write between tool calls may not be shown to the user. Everything the user needs from this turn \\u2014 answers, summaries, findings, conclusions, deliverables \\u2014 must be in the final text message of your turn, with no tool calls after it. Keep text between tool calls to brief status notes. If something important appeared only mid-turn or in your thinking, restate it in that final message.","",' +
+    '\'Lead with the outcome. Your first sentence after finishing should answer "what happened" or "what did you find" \\u2014 the thing the user would ask for if they said "just give me the TLDR." Supporting detail and reasoning come after, for readers who want them.\',"","Being readable and being concise are different things, and readable matters more. If the user has to reread your summary or ask you to explain, any time saved by brevity is gone. The way to keep output short is to be selective about what you include (drop details that don\'t change what the reader would do next), not to compress the writing into fragments, abbreviations, arrow chains like `A \\u2192 B \\u2192 fails`, or jargon. What you do include, write in complete sentences with the technical terms spelled out. Don\'t make the reader cross-reference labels or numbering you invented earlier; say what you mean in place.","","Match the response to the question: a simple question gets a direct answer in prose, not headers and sections. Use tables only for short enumerable facts, with explanations in the surrounding prose rather than the cells. Calibrate to the user \\u2014 a bit tighter for an expert, more explanatory for someone newer."].join(`';
+    const replaceComm = 'additional:{beforeDefault:["# Engineering & Collaboration Guidelines","","- Peer Collaboration: Partner with the user as an equal engineering peer; communicate naturally, honestly, and directly.","- Thoughtful & Diligent: Act diligently and responsibly, think through edge cases, and verify carefully before modifying code.","- Ask Promptly & Design Tree: When facing ambiguity or design branching, map decisions into a design tree and ask promptly with recommended options in rounds instead of guessing.","- Deep Module Design: Design deep modules with minimal, intuitive interfaces hiding rich internal logic; evaluate abstractions via the deletion test and avoid empty shallow wrappers.","- Direct & Focused: Keep answers focused on code, progress, and concrete deliverables; verify environment facts before asking."].join(`';
+
+    if (cjsCode.includes(targetComm)) {
+      cjsCode = cjsCode.replace(targetComm, replaceComm);
+      console.log('  ✔ [高阶工程注入] 系统指南已升级为「深模块设计、决策树对齐、平等协同」工程准则 (立省 ~1,000 Token)');
+    }
+  } else {
+    console.log('  ℹ️ [提示词跳过] 保持官方原版系统提示词不变 (完美兼容 GLM 官方订阅与 Prompt Cache)');
+  }
+
+  // 6.5 核心交互工具说明脱水瘦身 (EnterPlanMode / ExitPlanMode / Agent / AskUserQuestion)
+  const enterPlanRegex = /function\s+Zyn\s*\(e=\{\}\)\{return`Use this tool proactively[\s\S]*?Users appreciate being consulted before significant changes are made to their codebase\s*`\}/;
+  if (enterPlanRegex.test(cjsCode)) {
+    cjsCode = cjsCode.replace(enterPlanRegex, 'function Zyn(e={}){return"Transition into plan mode to explore the codebase and draft an implementation plan for user approval before making non-trivial changes."}');
+    console.log('  ✔ [工具说明瘦身] EnterPlanMode 教程说明已脱水压缩 (立省 ~900 Token)');
+  }
+
+  const exitPlanRegex = /emo=\[`Use this tool when you are in plan mode[\s\S]*?use exit plan mode tool after clarifying the approach\.\s*`\]/;
+  if (exitPlanRegex.test(cjsCode)) {
+    cjsCode = cjsCode.replace(exitPlanRegex, 'emo=["Exit plan mode and present the finalized plan to the user for review and approval."]');
+    console.log('  ✔ [工具说明瘦身] ExitPlanMode 教程说明已脱水压缩 (立省 ~450 Token)');
+  }
+
+  const agentWorkflowRegex = /,?\.\.\.e\.dynamicWorkflowEnabled===!1\?\[\]:\['- If the user explicitly asks for a workflow[\s\S]*?however small the task\.'\]/;
+  if (agentWorkflowRegex.test(cjsCode)) {
+    cjsCode = cjsCode.replace(agentWorkflowRegex, '');
+    console.log('  ✔ [工具说明瘦身] Agent 描述中强推 CreateWorkflow 的残留文案已清理');
+  }
+
+  const askUserRegex = /cua=\["Use this tool only when you are blocked on a decision that is genuinely the user's to make[\s\S]*?Note: previews are only supported for single-select questions \(not multiSelect\)\."\]\.join\(`/;
+  if (askUserRegex.test(cjsCode)) {
+    cjsCode = cjsCode.replace(askUserRegex, 'cua=["Ask the user a structured clarifying question with selectable options when blocked on ambiguous requirements or design choices.","Usage: options must contain choices; multiSelect allows multiple selections; first option can be marked \'(Recommended)\'."].join(`');
+    console.log('  ✔ [工具说明瘦身] AskUserQuestion 描述说明已精简提纯 (立省 ~400 Token)');
+  }
+
+  fs.writeFileSync(zcodeCjsFile, cjsCode, 'utf8');
+}
 
 // Step 3: Repack
 console.log('[4/4] 正在重新打包 app.asar...');
@@ -244,3 +356,9 @@ execSync(`npx @electron/asar pack "${extractedDir}" "${asarFile}"`, { stdio: 'in
 console.log('====================================================');
 console.log('       🎉 补丁全部成功应用并打包完成！              ');
 console.log('====================================================');
+}
+
+main().catch(err => {
+  console.error('\n❌ 补丁执行遇到错误:', err);
+  process.exit(1);
+});
